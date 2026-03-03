@@ -1,26 +1,69 @@
 {
-    "Comment": "A description of my state machine",
-    "StartAt": "GetObject",
-    "States": {
-        "GetObject": {
-            "Type": "Task",
-            "Arguments": {
-                "Bucket": "${DataBucketName}",
-                "Key": "file.txt"
-            },
-            "Resource": "arn:aws:states:::aws-sdk:s3:getObject",
-            "Next": "PutObject"
-        },
-        "PutObject": {
-            "Type": "Task",
-            "Arguments": {
-                "Body": "This is a random PutObject operation!",
-                "Bucket": "${DataBucketName}",
-                "Key": "new-file.txt"
-            },
-            "Resource": "arn:aws:states:::aws-sdk:s3:putObject",
-            "End": true
-        }
+  "Comment": "A description of my state machine",
+  "StartAt": "GetObject",
+  "States": {
+    "GetObject": {
+      "Type": "Task",
+      "Arguments": {
+        "Bucket": "${DataBucketName}",
+        "Key": "file.txt"
+      },
+      "Resource": "arn:aws:states:::aws-sdk:s3:getObject",
+      "Next": "Invoke Perplexity"
     },
-    "QueryLanguage": "JSONata"
+    "Invoke Perplexity": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::http:invoke",
+      "Arguments": {
+        "ApiEndpoint": "https://api.perplexity.ai/chat/completions",
+        "Method": "POST",
+        "InvocationConfig": {
+          "ConnectionArn": "${PerplexityConnectionArn}"
+        },
+        "RequestBody": {
+          "model": "sonar",
+          "messages": [
+            {
+              "role": "assistant",
+              "content": "Give me one random fun fact. Keep it under 3 sentences. Be creative and unexpected."
+            }
+          ]
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "BackoffRate": 2,
+          "IntervalSeconds": 1,
+          "MaxAttempts": 3,
+          "JitterStrategy": "FULL"
+        }
+      ],
+      "Next": "PutObject",
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "Next": "Success"
+        }
+      ]
+    },
+    "PutObject": {
+      "Type": "Task",
+      "Arguments": {
+        "Body": "This is a random PutObject operation!",
+        "Bucket": "${DataBucketName}",
+        "Key": "new-file.txt"
+      },
+      "Resource": "arn:aws:states:::aws-sdk:s3:putObject",
+      "End": true
+    },
+    "Success": {
+      "Type": "Succeed"
+    }
+  },
+  "QueryLanguage": "JSONata"
 }

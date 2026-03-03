@@ -29,17 +29,17 @@ export class AwsAutomationStack extends cdk.Stack {
             ],
         });
 
-        const geminiAPIConnection = new Connection(this, 'StateMachineAIGeminiAPIConnection', {
-            connectionName: 'gemini',
-            description: 'Connection for Gemini access through REST',
-            authorization: Authorization.apiKey('x-goog-api-key', SecretValue.secretsManager('gemini_api_key')),
+        const perplexityAPIConnection = new Connection(this, 'StateMachineAIPerplexityAPIConnection', {
+            connectionName: 'perplexity',
+            description: 'Connection for Perplexity access through REST',
+            authorization: Authorization.apiKey('Authorization', SecretValue.secretsManager('perplexity-api-key')),
         });
 
-        const geminiConnectionAccessPolicy = new PolicyDocument({
+        const perplexityConnectionAccessPolicy = new PolicyDocument({
             statements: [
                 new PolicyStatement({
-                    actions: ['events:RetrieveConnectionDetails'],
-                    resources: [geminiAPIConnection.connectionArn]
+                    actions: ['events:RetrieveConnectionCredentials'],
+                    resources: [perplexityAPIConnection.connectionArn]
                 }),
                 new PolicyStatement({
                     actions: ['secretsmanager:GetSecretValue', 'secretsmanager:DescribeSecret'],
@@ -62,7 +62,7 @@ export class AwsAutomationStack extends cdk.Stack {
             assumedBy: new ServicePrincipal('states.amazonaws.com'),
             inlinePolicies: {
                 S3AccessPolicy: s3AccessPolicy,
-                geminiConnectionAccessPolicy: geminiConnectionAccessPolicy,
+                perplexityConnectionAccessPolicy: perplexityConnectionAccessPolicy,
                 httpEndpointPolicy: httpEndpointPolicy
             }
         });
@@ -74,7 +74,7 @@ export class AwsAutomationStack extends cdk.Stack {
             definitionBody: DefinitionBody.fromFile('statemachine/definition.asl.json'),
             definitionSubstitutions: {
                 DataBucketName: dataBucket.bucketName,
-                GeminiConnectionArn: geminiAPIConnection.connectionArn,
+                PerplexityConnectionArn: perplexityAPIConnection.connectionArn,
             }
         });
 
