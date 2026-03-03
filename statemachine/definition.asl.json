@@ -6,10 +6,13 @@
       "Type": "Task",
       "Arguments": {
         "Bucket": "${DataBucketName}",
-        "Key": "file.txt"
+        "Key": "perplexity-prompt.txt"
       },
       "Resource": "arn:aws:states:::aws-sdk:s3:getObject",
-      "Next": "Invoke Perplexity"
+      "Next": "Invoke Perplexity",
+      "Assign": {
+        "perplexityPrompt": "{% $states.result.Body %}"
+      }
     },
     "Invoke Perplexity": {
       "Type": "Task",
@@ -24,8 +27,8 @@
           "model": "sonar",
           "messages": [
             {
-              "role": "assistant",
-              "content": "Give me one random fun fact. Keep it under 3 sentences. Be creative and unexpected."
+              "role": "user",
+              "content": "{% $perplexityPrompt %}"
             }
           ]
         }
@@ -49,7 +52,10 @@
           ],
           "Next": "Success"
         }
-      ]
+      ],
+      "Assign": {
+        "perplexityAnswer": "{% $exists($states.result.ResponseBody.choices.message.content) ? $states.result.ResponseBody.choices.message.content : 'Unable to get response from Perplexity' %}"
+      }
     },
     "PutObject": {
       "Type": "Task",
