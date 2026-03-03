@@ -1,6 +1,5 @@
 # Added by me
 .idea/
-demo-data
 
 *.js
 !jest.config.js

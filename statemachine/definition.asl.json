@@ -1,12 +1,12 @@
 {
   "Comment": "A description of my state machine",
-  "StartAt": "GetObject",
+  "StartAt": "Get Perplexity Prompt",
   "States": {
-    "GetObject": {
+    "Get Perplexity Prompt": {
       "Type": "Task",
       "Arguments": {
         "Bucket": "${DataBucketName}",
-        "Key": "perplexity-prompt.txt"
+        "Key": "prompts/perplexity-prompt.txt"
       },
       "Resource": "arn:aws:states:::aws-sdk:s3:getObject",
       "Next": "Invoke Perplexity",
@@ -44,7 +44,7 @@
           "JitterStrategy": "FULL"
         }
       ],
-      "Next": "PutObject",
+      "Next": "Save Perplexity response",
       "Catch": [
         {
           "ErrorEquals": [
@@ -54,15 +54,16 @@
         }
       ],
       "Assign": {
-        "perplexityAnswer": "{% $exists($states.result.ResponseBody.choices.message.content) ? $states.result.ResponseBody.choices.message.content : 'Unable to get response from Perplexity' %}"
+        "perplexityResponseId": "{% $exists($states.result.ResponseBody.id) ? $states.result.ResponseBody.id : $millis() %}",
+        "perplexityResponse": "{% $exists($states.result.ResponseBody.choices.message.content) ? $states.result.ResponseBody.choices.message.content : 'Unable to get response from Perplexity' %}"
       }
     },
-    "PutObject": {
+    "Save Perplexity response": {
       "Type": "Task",
       "Arguments": {
-        "Body": "This is a random PutObject operation!",
+        "Body": "{% $perplexityResponse %}",
         "Bucket": "${DataBucketName}",
-        "Key": "new-file.txt"
+        "Key": "{% 'responses/' & $perplexityResponseId & '.txt'%}"
       },
       "Resource": "arn:aws:states:::aws-sdk:s3:putObject",
       "End": true

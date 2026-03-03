@@ -5,6 +5,7 @@ import {DefinitionBody, StateMachine} from "aws-cdk-lib/aws-stepfunctions";
 import {Bucket} from "aws-cdk-lib/aws-s3";
 import {CfnOutput, RemovalPolicy, SecretValue} from "aws-cdk-lib/core";
 import {Authorization, Connection} from "aws-cdk-lib/aws-events";
+import {BucketDeployment, Source} from "aws-cdk-lib/aws-s3-deployment";
 
 export class AwsAutomationStack extends cdk.Stack {
     constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -27,6 +28,12 @@ export class AwsAutomationStack extends cdk.Stack {
                     ],
                 }),
             ],
+        });
+
+        new BucketDeployment(this, 'DeployPrompts', {
+            sources: [Source.asset('./prompts')],
+            destinationBucket: dataBucket,
+            destinationKeyPrefix: 'prompts/'
         });
 
         const perplexityAPIConnection = new Connection(this, 'StateMachineAIPerplexityAPIConnection', {
