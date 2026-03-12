@@ -67,6 +67,33 @@
         "Key": "{% 'responses/' & $perplexityResponseId & '.txt'%}"
       },
       "Resource": "arn:aws:states:::aws-sdk:s3:putObject",
+      "Next": "Get S3 Signed URL"
+    },
+    "Get S3 Signed URL": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Output": "{% $states.result.Payload %}",
+      "Arguments": {
+        "FunctionName": "${SignS3UrlFunctionArn}",
+        "Payload": {
+          "bucketName": "${DataBucketName}",
+          "objectKey": "{% 'responses/' & $perplexityResponseId & '.txt'%}"
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 1,
+          "MaxAttempts": 3,
+          "BackoffRate": 2,
+          "JitterStrategy": "FULL"
+        }
+      ],
       "Next": "Send Perplexity response by email"
     },
     "Send Perplexity response by email": {

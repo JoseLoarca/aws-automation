@@ -11,6 +11,9 @@ import {CfnPipe} from "aws-cdk-lib/aws-pipes";
 import {LogGroup, RetentionDays} from "aws-cdk-lib/aws-logs";
 import {Subscription, SubscriptionProtocol, Topic} from "aws-cdk-lib/aws-sns";
 import * as config from '../app-config.json'
+import * as path from "node:path";
+import {Runtime} from "aws-cdk-lib/aws-lambda";
+import {NodejsFunction} from "aws-cdk-lib/aws-lambda-nodejs";
 
 export class AwsAutomationStack extends cdk.Stack {
     constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -70,6 +73,31 @@ export class AwsAutomationStack extends cdk.Stack {
             destinationKeyPrefix: 'prompts/'
         });
 
+        // -- Lambda Functions --
+        const signS3UrlFunction = new NodejsFunction(this, 'SignS3UrlFunction', {
+           entry: path.join(__dirname, '../lambda/sign-s3-url.ts'),
+            runtime: Runtime.NODEJS_24_X,
+            handler: 'handler',
+
+            // Bundle config
+            bundling: {
+               minify: true,
+                sourceMap: true,
+                externalModules: ['aws-sdk']
+            }
+        });
+
+        dataBucket.grantRead(signS3UrlFunction);
+
+        const lambdaAccessPolicy = new PolicyDocument({
+            statements: [
+                new PolicyStatement({
+                    actions: ['lambda:InvokeFunction'],
+                    resources: [signS3UrlFunction.functionArn],
+                })
+            ]
+        });
+
         // -- HTTP Connections --
         const perplexityAPIConnection = new Connection(this, 'StateMachineAIPerplexityAPIConnection', {
             connectionName: 'perplexity',
@@ -106,7 +134,8 @@ export class AwsAutomationStack extends cdk.Stack {
                 S3AccessPolicy: s3AccessPolicy,
                 perplexityConnectionAccessPolicy: perplexityConnectionAccessPolicy,
                 httpEndpointPolicy: httpEndpointPolicy,
-                snsPublishPolicy: snsPublishPolicy
+                snsPublishPolicy: snsPublishPolicy,
+                lambdaAccessPolicy: lambdaAccessPolicy
             }
         });
 
@@ -118,7 +147,8 @@ export class AwsAutomationStack extends cdk.Stack {
             definitionSubstitutions: {
                 DataBucketName: dataBucket.bucketName,
                 PerplexityConnectionArn: perplexityAPIConnection.connectionArn,
-                SNSTopicARN: snsTopic.topicArn
+                SNSTopicARN: snsTopic.topicArn,
+                SignS3UrlFunctionArn: signS3UrlFunction.functionArn,
             }
         });
 
