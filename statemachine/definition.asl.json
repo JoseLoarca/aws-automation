@@ -77,7 +77,8 @@
         "FunctionName": "${SignS3UrlFunctionArn}",
         "Payload": {
           "bucketName": "${DataBucketName}",
-          "objectKey": "{% 'responses/' & $perplexityResponseId & '.txt'%}"
+          "objectKey": "{% 'responses/' & $perplexityResponseId & '.txt'%}",
+          "perplexityResponse": "{% $perplexityResponse %}"
         }
       },
       "Retry": [
@@ -92,6 +93,17 @@
           "MaxAttempts": 3,
           "BackoffRate": 2,
           "JitterStrategy": "FULL"
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "Next": "Success",
+          "Output": {
+            "error": "Error!"
+          }
         }
       ],
       "Next": "Send Perplexity response by email"
