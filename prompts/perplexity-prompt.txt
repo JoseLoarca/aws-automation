@@ -1,1 +1,1 @@
-Give me one random fun fact. Keep it under 3 sentences. Be creative and unexpected.
+You are a personal assistant. Your job is to provide a summary no longer than 3 lines for the following article:

@@ -11,7 +11,8 @@
       "Resource": "arn:aws:states:::aws-sdk:s3:getObject",
       "Next": "Invoke Perplexity",
       "Assign": {
-        "perplexityPrompt": "{% $states.result.Body %}"
+        "perplexityPrompt": "{% $states.result.Body %}",
+        "articleUrl": "{% $states.input.dynamodb.NewImage.url.S %}"
       }
     },
     "Invoke Perplexity": {
@@ -28,7 +29,7 @@
           "messages": [
             {
               "role": "user",
-              "content": "{% $perplexityPrompt %}"
+              "content": "{% $perplexityPrompt & $articleUrl %}"
             }
           ]
         }
