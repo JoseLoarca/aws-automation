@@ -1,15 +1,29 @@
 import * as cdk from 'aws-cdk-lib/core';
+import {CfnOutput, RemovalPolicy, SecretValue} from 'aws-cdk-lib/core';
 import {Construct} from 'constructs';
 import {PolicyDocument, PolicyStatement, Role, ServicePrincipal} from "aws-cdk-lib/aws-iam";
 import {DefinitionBody, StateMachine} from "aws-cdk-lib/aws-stepfunctions";
 import {Bucket} from "aws-cdk-lib/aws-s3";
-import {CfnOutput, RemovalPolicy, SecretValue} from "aws-cdk-lib/core";
 import {Authorization, Connection} from "aws-cdk-lib/aws-events";
 import {BucketDeployment, Source} from "aws-cdk-lib/aws-s3-deployment";
+import {AttributeType, StreamViewType, Table} from "aws-cdk-lib/aws-dynamodb";
+import {CfnPipe} from "aws-cdk-lib/aws-pipes";
+import {LogGroup, RetentionDays} from "aws-cdk-lib/aws-logs";
 
 export class AwsAutomationStack extends cdk.Stack {
     constructor(scope: Construct, id: string, props?: cdk.StackProps) {
         super(scope, id, props);
+
+        // -- DynamoDB Table --
+        const dataTable = new Table(this, 'MyStepFunctionsDataTable', {
+            tableName: 'my-step-functions-dynamodb-table',
+            partitionKey: {
+                name: 'id',
+                type: AttributeType.STRING,
+            },
+            stream: StreamViewType.NEW_AND_OLD_IMAGES,
+            removalPolicy: RemovalPolicy.DESTROY,
+        })
 
         // -- S3 --
         const dataBucket = new Bucket(this, 'MyStepFunctionsDataBucket', {
@@ -85,9 +99,83 @@ export class AwsAutomationStack extends cdk.Stack {
             }
         });
 
-        // -- CloudFormation Output --
+        // -- EventBridge Pipe Role --
+        const pipeLogGroup = new LogGroup(this, 'PipeLogGroup', {
+            logGroupName: '/aws/pipes/dynamodb-to-stepfunctions-pipe-log-group',
+            retention: RetentionDays.FIVE_DAYS,
+            removalPolicy: RemovalPolicy.DESTROY,
+        })
+
+        const pipeRole = new Role(this, 'MyStepFunctionsPipeRole', {
+            assumedBy: new ServicePrincipal('pipes.amazonaws.com'),
+            inlinePolicies: {
+                DynamoStreamAccess: new PolicyDocument({
+                    statements: [
+                        new PolicyStatement({
+                            actions: ['dynamodb:DescribeStream', 'dynamodb:GetRecords', 'dynamodb:GetShardIterator',
+                                'dynamodb:ListStreams'],
+                            resources: [dataTable.tableStreamArn!]
+                        })
+                    ]
+                }),
+                StepFunctionArn: new PolicyDocument({
+                    statements: [
+                        new PolicyStatement({
+                            actions: ['states:StartExecution'],
+                            resources: [workflow.stateMachineArn]
+                        }),
+                        new PolicyStatement({
+                            actions: ['iam:PassRole'],
+                            resources: [stateMachineRole.roleArn]
+                        })
+                    ]
+                }),
+                LogsAccess: new PolicyDocument({
+                    statements: [
+                        new PolicyStatement({
+                            actions: ['logs:CreateLogStream', 'logs:PutLogEvents'],
+                            resources: [pipeLogGroup.logGroupArn]
+                        })
+                    ]
+                }),
+            }
+        });
+
+        const pipe = new CfnPipe(this, 'DynamoToStepFunctionsPipe', {
+            roleArn: pipeRole.roleArn,
+            source: dataTable.tableStreamArn!,
+            target: workflow.stateMachineArn,
+            targetParameters: {
+                stepFunctionStateMachineParameters: {
+                    invocationType: 'FIRE_AND_FORGET'
+                }
+            },
+            sourceParameters: {
+                dynamoDbStreamParameters: {
+                    batchSize: 1,
+                    startingPosition: 'LATEST'
+                },
+                filterCriteria: {
+                    filters: [{
+                        pattern: JSON.stringify({eventName: ['INSERT']})
+                    }]
+                }
+            },
+            logConfiguration: {
+                cloudwatchLogsLogDestination: {
+                    logGroupArn: pipeLogGroup.logGroupArn
+                },
+                level: 'INFO'
+            }
+        });
+
+        // -- CloudFormation Outputs --
         new CfnOutput(this, 'CFOutputStateMachineArn', {
             value: workflow.stateMachineArn
+        });
+
+        new CfnOutput(this, 'CFNOutputPipeArn', {
+            value: pipe.attrArn
         });
 
     }
