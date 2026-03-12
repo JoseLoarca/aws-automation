@@ -9,6 +9,8 @@ import {BucketDeployment, Source} from "aws-cdk-lib/aws-s3-deployment";
 import {AttributeType, StreamViewType, Table} from "aws-cdk-lib/aws-dynamodb";
 import {CfnPipe} from "aws-cdk-lib/aws-pipes";
 import {LogGroup, RetentionDays} from "aws-cdk-lib/aws-logs";
+import {Subscription, SubscriptionProtocol, Topic} from "aws-cdk-lib/aws-sns";
+import * as config from '../app-config.json'
 
 export class AwsAutomationStack extends cdk.Stack {
     constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -23,7 +25,25 @@ export class AwsAutomationStack extends cdk.Stack {
             },
             stream: StreamViewType.NEW_AND_OLD_IMAGES,
             removalPolicy: RemovalPolicy.DESTROY,
-        })
+        });
+
+        // -- SNS Topic --
+        const snsTopic = new Topic(this, 'MyStepFunctionsSnsTopic');
+
+        new Subscription(this, 'MyStepFunctionsSnsSubscription', {
+            topic: snsTopic,
+            endpoint: config.emailAddress,
+            protocol: SubscriptionProtocol.EMAIL
+        });
+
+        const snsPublishPolicy = new PolicyDocument({
+            statements: [
+                new PolicyStatement({
+                    actions: ['sns:Publish'],
+                    resources: [snsTopic.topicArn]
+                })
+            ]
+        });
 
         // -- S3 --
         const dataBucket = new Bucket(this, 'MyStepFunctionsDataBucket', {
@@ -50,6 +70,7 @@ export class AwsAutomationStack extends cdk.Stack {
             destinationKeyPrefix: 'prompts/'
         });
 
+        // -- HTTP Connections --
         const perplexityAPIConnection = new Connection(this, 'StateMachineAIPerplexityAPIConnection', {
             connectionName: 'perplexity',
             description: 'Connection for Perplexity access through REST',
@@ -76,7 +97,7 @@ export class AwsAutomationStack extends cdk.Stack {
                     resources: ['*']
                 })
             ]
-        })
+        });
 
         // -- Step Functions Role --
         const stateMachineRole = new Role(this, 'StateMachineAIRole', {
@@ -84,7 +105,8 @@ export class AwsAutomationStack extends cdk.Stack {
             inlinePolicies: {
                 S3AccessPolicy: s3AccessPolicy,
                 perplexityConnectionAccessPolicy: perplexityConnectionAccessPolicy,
-                httpEndpointPolicy: httpEndpointPolicy
+                httpEndpointPolicy: httpEndpointPolicy,
+                snsPublishPolicy: snsPublishPolicy
             }
         });
 
@@ -96,15 +118,16 @@ export class AwsAutomationStack extends cdk.Stack {
             definitionSubstitutions: {
                 DataBucketName: dataBucket.bucketName,
                 PerplexityConnectionArn: perplexityAPIConnection.connectionArn,
+                SNSTopicARN: snsTopic.topicArn
             }
         });
 
-        // -- EventBridge Pipe Role --
+        // -- EventBridge Pipe --
         const pipeLogGroup = new LogGroup(this, 'PipeLogGroup', {
             logGroupName: '/aws/pipes/dynamodb-to-stepfunctions-pipe-log-group',
             retention: RetentionDays.FIVE_DAYS,
             removalPolicy: RemovalPolicy.DESTROY,
-        })
+        });
 
         const pipeRole = new Role(this, 'MyStepFunctionsPipeRole', {
             assumedBy: new ServicePrincipal('pipes.amazonaws.com'),

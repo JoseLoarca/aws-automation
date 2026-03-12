@@ -1,5 +1,6 @@
 # Added by me
 .idea/
+app-config.json
 
 *.js
 !jest.config.js

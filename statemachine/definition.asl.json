@@ -67,6 +67,15 @@
         "Key": "{% 'responses/' & $perplexityResponseId & '.txt'%}"
       },
       "Resource": "arn:aws:states:::aws-sdk:s3:putObject",
+      "Next": "Send Perplexity response by email"
+    },
+    "Send Perplexity response by email": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sns:publish",
+      "Arguments": {
+        "Message": "{% $states.input %}",
+        "TopicArn": "${SNSTopicARN}"
+      },
       "End": true
     },
     "Success": {
