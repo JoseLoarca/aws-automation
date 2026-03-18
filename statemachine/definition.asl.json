@@ -115,6 +115,46 @@
         "Message": "{% $states.input %}",
         "TopicArn": "${SNSTopicARN}"
       },
+      "Next": "Get Bedrock prompt"
+    },
+    "Get Bedrock prompt": {
+      "Type": "Task",
+      "Arguments": {
+        "Bucket": "${DataBucketName}",
+        "Key": "prompts/bedrock-prompt.txt"
+      },
+      "Resource": "arn:aws:states:::aws-sdk:s3:getObject",
+      "Assign": {
+        "bedrockPrompt": "{% $states.result.Body %}"
+      },
+      "Next": "Invoke Nova lite"
+    },
+    "Invoke Nova lite": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::bedrock:invokeModel",
+      "Arguments": {
+        "ModelId": "arn:aws:bedrock:us-east-1::foundation-model/amazon.nova-lite-v1:0",
+        "Body": {
+          "messages": [
+            {
+              "role": "user",
+              "content": [
+                {
+                  "text": "{% $bedrockPrompt & $perplexityResponse %}"
+                }
+              ]
+            }
+          ],
+          "inferenceConfig": {
+            "maxTokens": 512
+          }
+        },
+        "ContentType": "application/json",
+        "Accept": "*/*"
+      },
+      "Assign": {
+        "bedrockResponse": "{% $states.result.Body.output.message.content.text %}"
+      },
       "End": true
     },
     "Success": {

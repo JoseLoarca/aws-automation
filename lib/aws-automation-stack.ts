@@ -127,6 +127,16 @@ export class AwsAutomationStack extends cdk.Stack {
             ]
         });
 
+        // -- Bedrock Policy --
+        const invokeModelPolicy = new PolicyDocument({
+            statements: [
+                new PolicyStatement({
+                    actions: ['bedrock:InvokeModel'],
+                    resources: [`arn:aws:bedrock:${this.region}::foundation-model/amazon.nova-lite-v1:0`]
+                })
+            ]
+        });
+
         // -- Step Functions Role --
         const stateMachineRole = new Role(this, 'StateMachineAIRole', {
             assumedBy: new ServicePrincipal('states.amazonaws.com'),
@@ -135,7 +145,8 @@ export class AwsAutomationStack extends cdk.Stack {
                 perplexityConnectionAccessPolicy: perplexityConnectionAccessPolicy,
                 httpEndpointPolicy: httpEndpointPolicy,
                 snsPublishPolicy: snsPublishPolicy,
-                lambdaAccessPolicy: lambdaAccessPolicy
+                lambdaAccessPolicy: lambdaAccessPolicy,
+                invokeModelPolicy: invokeModelPolicy,
             }
         });
 
