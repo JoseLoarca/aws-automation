@@ -75,13 +75,13 @@ export class AwsAutomationStack extends cdk.Stack {
 
         // -- Lambda Functions --
         const signS3UrlFunction = new NodejsFunction(this, 'SignS3UrlFunction', {
-           entry: path.join(__dirname, '../lambda/sign-s3-url.ts'),
+            entry: path.join(__dirname, '../lambda/sign-s3-url.ts'),
             runtime: Runtime.NODEJS_24_X,
             handler: 'handler',
 
             // Bundle config
             bundling: {
-               minify: true,
+                minify: true,
                 sourceMap: true,
                 externalModules: ['aws-sdk']
             }
@@ -132,9 +132,40 @@ export class AwsAutomationStack extends cdk.Stack {
             statements: [
                 new PolicyStatement({
                     actions: ['bedrock:InvokeModel'],
-                    resources: [`arn:aws:bedrock:${this.region}::foundation-model/amazon.nova-lite-v1:0`]
+                    resources: [`arn:aws:bedrock:${this.region}::foundation-model/amazon.nova-lite-v1:0`,
+                        `arn:aws:bedrock:${this.region}::foundation-model/amazon.nova-canvas-v1:0`
+                    ]
                 })
             ]
+        });
+
+        // -- Image Generation State Machine --
+        const imageGenerationStateMachineRole = new Role(this, 'ImageGenerationStateMachineRole', {
+            assumedBy: new ServicePrincipal('states.amazonaws.com'),
+            inlinePolicies: {
+                S3AccessPolicy: s3AccessPolicy,
+                invokeModelPolicy: invokeModelPolicy,
+            }
+        });
+
+        const imageGenerationWorkflow = new StateMachine(this, 'ImageGenerationWorkflow', {
+            stateMachineName: 'ImageGenerationWorkflow',
+            role: imageGenerationStateMachineRole,
+            definitionBody: DefinitionBody.fromFile('statemachine/image-generator.asl.json'),
+            definitionSubstitutions: {
+                DataBucketName: dataBucket.bucketName,
+            }
+        });
+
+        const imageGenerationStateMachineExecutionPolicy = new PolicyDocument({
+            statements: [
+                new PolicyStatement({
+                    actions: ['states:StartExecution'],
+                    resources: [
+                        imageGenerationWorkflow.stateMachineArn
+                    ],
+                }),
+            ],
         });
 
         // -- Step Functions Role --
@@ -147,6 +178,7 @@ export class AwsAutomationStack extends cdk.Stack {
                 snsPublishPolicy: snsPublishPolicy,
                 lambdaAccessPolicy: lambdaAccessPolicy,
                 invokeModelPolicy: invokeModelPolicy,
+                imageGenerationStateMachineExecutionPolicy: imageGenerationStateMachineExecutionPolicy
             }
         });
 
@@ -160,6 +192,7 @@ export class AwsAutomationStack extends cdk.Stack {
                 PerplexityConnectionArn: perplexityAPIConnection.connectionArn,
                 SNSTopicARN: snsTopic.topicArn,
                 SignS3UrlFunctionArn: signS3UrlFunction.functionArn,
+                ImageGenerationStateMachineARN: imageGenerationWorkflow.stateMachineArn
             }
         });
 
@@ -234,8 +267,12 @@ export class AwsAutomationStack extends cdk.Stack {
         });
 
         // -- CloudFormation Outputs --
-        new CfnOutput(this, 'CFOutputStateMachineArn', {
+        new CfnOutput(this, 'CFNOutputPrincipalStateMachineArn', {
             value: workflow.stateMachineArn
+        });
+
+        new CfnOutput(this, 'CFNOutputImageGenerationStateMachineArn', {
+            value: imageGenerationWorkflow.stateMachineArn
         });
 
         new CfnOutput(this, 'CFNOutputPipeArn', {

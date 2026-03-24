@@ -115,48 +115,77 @@
         "Message": "{% $states.input %}",
         "TopicArn": "${SNSTopicARN}"
       },
-      "Next": "Get Bedrock prompt"
+      "Next": "Parallel"
     },
-    "Get Bedrock prompt": {
-      "Type": "Task",
-      "Arguments": {
-        "Bucket": "${DataBucketName}",
-        "Key": "prompts/bedrock-prompt.txt"
-      },
-      "Resource": "arn:aws:states:::aws-sdk:s3:getObject",
-      "Assign": {
-        "bedrockPrompt": "{% $states.result.Body %}"
-      },
-      "Next": "Invoke Nova lite"
-    },
-    "Invoke Nova lite": {
-      "Type": "Task",
-      "Resource": "arn:aws:states:::bedrock:invokeModel",
-      "Arguments": {
-        "ModelId": "arn:aws:bedrock:us-east-1::foundation-model/amazon.nova-lite-v1:0",
-        "Body": {
-          "messages": [
-            {
-              "role": "user",
-              "content": [
-                {
-                  "text": "{% $bedrockPrompt & $perplexityResponse %}"
-                }
-              ]
+    "Parallel": {
+      "Type": "Parallel",
+      "Branches": [
+        {
+          "StartAt": "Get Bedrock prompt",
+          "States": {
+            "Get Bedrock prompt": {
+              "Type": "Task",
+              "Arguments": {
+                "Bucket": "${DataBucketName}",
+                "Key": "prompts/bedrock-prompt.txt"
+              },
+              "Resource": "arn:aws:states:::aws-sdk:s3:getObject",
+              "Assign": {
+                "bedrockPrompt": "{% $states.result.Body %}"
+              },
+              "Next": "Invoke Nova lite"
+            },
+            "Invoke Nova lite": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::bedrock:invokeModel",
+              "Arguments": {
+                "ModelId": "arn:aws:bedrock:us-east-1::foundation-model/amazon.nova-lite-v1:0",
+                "Body": {
+                  "messages": [
+                    {
+                      "role": "user",
+                      "content": [
+                        {
+                          "text": "{% $bedrockPrompt & $perplexityResponse %}"
+                        }
+                      ]
+                    }
+                  ],
+                  "inferenceConfig": {
+                    "maxTokens": 512
+                  }
+                },
+                "ContentType": "application/json",
+                "Accept": "*/*"
+              },
+              "Assign": {
+                "bedrockResponse": "{% $states.result.Body.output.message.content.text %}"
+              },
+              "End": true
             }
-          ],
-          "inferenceConfig": {
-            "maxTokens": 512
           }
         },
-        "ContentType": "application/json",
-        "Accept": "*/*"
-      },
-      "Assign": {
-        "bedrockResponse": "{% $states.result.Body.output.message.content.text %}"
-      },
+        {
+          "StartAt": "Step Functions StartExecution",
+          "States": {
+            "Step Functions StartExecution": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::states:startExecution",
+              "Arguments": {
+                "StateMachineArn": "${ImageGenerationStateMachineARN}",
+                "Input": {
+                  "StatePayload": "Hello from Step Functions!",
+                  "AWS_STEP_FUNCTIONS_STARTED_BY_EXECUTION_ID": "{% $states.context.Execution.Id %}"
+                }
+              },
+              "End": true
+            }
+          }
+        }
+      ],
       "End": true
     },
+
     "Success": {
       "Type": "Succeed"
     }

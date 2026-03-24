@@ -1,0 +1,43 @@
+{
+  "Comment": "This is a state machine that handles image generation workflows.",
+  "StartAt": "Get Bedrock Prompt",
+  "States": {
+    "Get Bedrock Prompt": {
+      "Type": "Task",
+      "Arguments": {
+        "Bucket": "${DataBucketName}",
+        "Key": "prompts/image-generation-prompt.txt"
+      },
+      "Resource": "arn:aws:states:::aws-sdk:s3:getObject",
+      "Assign": {
+        "bedrockPrompt": "{% $states.result.Body %}"
+      },
+      "Next": "Invoke Nova Canvas"
+    },
+    "Invoke Nova Canvas": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::bedrock:invokeModel",
+      "Arguments": {
+        "ModelId": "arn:aws:bedrock:us-east-1::foundation-model/amazon.nova-canvas-v1:0",
+        "Body": {
+          "taskType": "TEXT_IMAGE",
+          "textToImageParams": {
+            "text": "{% $bedrockPrompt %}",
+            "style": "PHOTOREALISM"
+          },
+          "imageGenerationConfig": {
+            "width": 512,
+            "height": 512,
+            "quality": "standard",
+            "numberOfImages": 1
+          }
+        },
+        "Output": {
+          "S3Uri": "s3://${DataBucketName}/nova-images/latest-image.json"
+        }
+      },
+      "End": true
+    }
+  },
+  "QueryLanguage": "JSONata"
+}
