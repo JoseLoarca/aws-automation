@@ -36,6 +36,33 @@
           "S3Uri": "s3://${DataBucketName}/nova-images/latest-image.json"
         }
       },
+      "Next": "Process Bedrock Image"
+    },
+    "Process Bedrock Image": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Output": "{% $states.result.Payload %}",
+      "Arguments": {
+        "FunctionName": "${ProcessBedrockImageFunctionArn}",
+        "Payload": {
+          "bucketName": "${DataBucketName}",
+          "sourceKey": "nova-images/latest-image.json"
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 1,
+          "MaxAttempts": 3,
+          "BackoffRate": 2,
+          "JitterStrategy": "FULL"
+        }
+      ],
       "End": true
     }
   },

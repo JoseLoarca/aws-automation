@@ -89,11 +89,26 @@ export class AwsAutomationStack extends cdk.Stack {
 
         dataBucket.grantRead(signS3UrlFunction);
 
+        const processBedrockImageFunction = new NodejsFunction(this, 'ProcessBedrockImageFunction', {
+            entry: path.join(__dirname, '../lambda/process-bedrock-image.ts'),
+            runtime: Runtime.NODEJS_24_X,
+            handler: 'handler',
+
+            // Bundle config
+            bundling: {
+                minify: true,
+                sourceMap: true,
+                externalModules: ['aws-sdk']
+            }
+        });
+
+        dataBucket.grantReadWrite(processBedrockImageFunction);
+
         const lambdaAccessPolicy = new PolicyDocument({
             statements: [
                 new PolicyStatement({
                     actions: ['lambda:InvokeFunction'],
-                    resources: [signS3UrlFunction.functionArn],
+                    resources: [signS3UrlFunction.functionArn, processBedrockImageFunction.functionArn],
                 })
             ]
         });
@@ -145,6 +160,7 @@ export class AwsAutomationStack extends cdk.Stack {
             inlinePolicies: {
                 S3AccessPolicy: s3AccessPolicy,
                 invokeModelPolicy: invokeModelPolicy,
+                lambdaPolicy: lambdaAccessPolicy
             }
         });
 
@@ -154,6 +170,7 @@ export class AwsAutomationStack extends cdk.Stack {
             definitionBody: DefinitionBody.fromFile('statemachine/image-generator.asl.json'),
             definitionSubstitutions: {
                 DataBucketName: dataBucket.bucketName,
+                ProcessBedrockImageFunctionArn: processBedrockImageFunction.functionArn,
             }
         });
 
